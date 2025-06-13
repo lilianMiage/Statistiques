@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo_db
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  spring-app:
+    build: .
+    container_name: spring_statistique_app
+    ports:
+      - "8121:8121"
+    depends_on:
+      - mongo
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/statistique
+
+volumes:
+  mongo_data:
