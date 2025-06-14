@@ -8,5 +8,4 @@ import java.util.List;
 
 public interface CarSnapshotRepository extends MongoRepository<CarSnapshot, String> {
     List<CarSnapshot> findByCarIdOrderByTimestampDesc(long carId);
-    List<CarSnapshot> findByTimestampAfter(Instant timestamp);
 }

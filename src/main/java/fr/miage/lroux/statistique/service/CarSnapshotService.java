@@ -6,6 +6,7 @@ import fr.miage.lroux.statistique.repo.CarSnapshotRepository;
 import fr.miage.lroux.statistique.transientObj.CarGlobalStatsDTO;
 import fr.miage.lroux.statistique.transientObj.CarStatPerPeriodDTO;
 import fr.miage.lroux.statistique.transientObj.CarStatPerPeriodPerCarDTO;
+import fr.miage.lroux.statistique.utilities.Periode;
 import fr.miage.lroux.statistique.utilities.YearWeek;
 import org.springframework.stereotype.Service;
 
@@ -19,7 +20,6 @@ import java.util.stream.Collectors;
 @Service
 public class CarSnapshotService {
     private final CarSnapshotRepository repository;
-
     public CarSnapshotService(CarSnapshotRepository repository) {
         this.repository = repository;
     }
@@ -33,224 +33,299 @@ public class CarSnapshotService {
         return repository.findByCarIdOrderByTimestampDesc(carId);
     }
 
-    public List<CarSnapshot> getSnapshotsAfter(Instant timestamp) {
-        return repository.findByTimestampAfter(timestamp);
+    public double getUsedPercentage(
+            List<CarSnapshot> snapshots,
+            boolean initialUsed,
+            ZonedDateTime start,
+            ZonedDateTime end
+    ) {
+        if (!start.isBefore(end)) return 0.0;
+
+        Instant periodStart = start.toInstant();
+        Instant periodEnd = end.toInstant();
+
+        if (snapshots.isEmpty()) {
+            // S'il n'y a aucun snapshot, alors tout dépend de l'état initial
+            return initialUsed ? 1.0 : 0.0;
+        }
+
+        double usedMillis = 0.0;
+        Instant lastTime = periodStart;
+        boolean currentUsed = initialUsed;
+
+        for (CarSnapshot snapshot : snapshots) {
+            Instant ts = snapshot.getTimestamp();
+            if (ts.isBefore(periodStart)) continue;
+            if (!ts.isBefore(periodEnd)) break;
+
+            long delta = Duration.between(lastTime, ts).toMillis();
+            if (currentUsed) usedMillis += delta;
+
+            currentUsed = snapshot.isUsed();
+            lastTime = ts;
+        }
+
+        if (lastTime.isBefore(periodEnd) && currentUsed) {
+            usedMillis += Duration.between(lastTime, periodEnd).toMillis();
+        }
+
+        long totalMillis = Duration.between(periodStart, periodEnd).toMillis();
+        return totalMillis > 0 ? usedMillis / totalMillis : 0.0;
     }
 
-    public List<CarStatPerPeriodDTO> getStatsGroupedByPeriod(String period) {
+    public List<CarStatPerPeriodDTO> computeAverageCarStatsPerPeriodService(String period) {
         List<CarSnapshot> allSnapshots = repository.findAll();
         TimeGranularity granularity = TimeGranularity.valueOf(period.toUpperCase());
 
-        Map<Object, List<CarSnapshot>> grouped = groupSnapshotsByPeriod(allSnapshots, granularity);
-
-        return grouped.entrySet().stream().map(entry -> {
-            Object periodKey = entry.getKey();
-            List<CarSnapshot> snapshotsInPeriod = entry.getValue();
-
-            ZonedDateTime periodStart = getPeriodStart(periodKey, granularity);
-            ZonedDateTime periodEnd = getPeriodEnd(periodStart, granularity);
-            ZonedDateTime now = ZonedDateTime.now();
-            if (periodEnd.isAfter(now)) {
-                periodEnd = now;
-            }
-
-            Map<Long, List<CarSnapshot>> snapshotsByCar = snapshotsInPeriod.stream()
-                    .collect(Collectors.groupingBy(CarSnapshot::getCarId));
-
-            double totalUsedRatio = getStatsGroupedByPeriodByCar(snapshotsByCar, allSnapshots, periodStart, periodEnd);
-
-            Map<Long, Double> kmByCar = getKmTravelledPerCarInPeriod(snapshotsByCar, allSnapshots, periodStart, periodEnd);
-            double avgKm = getAverageKmTravelled(kmByCar);
-
-            return CarStatPerPeriodDTO.builder()
-                    .periodLabel(periodKey.toString())
-                    .averageKilometresTravelled(avgKm)
-                    .snapshotCount(snapshotsInPeriod.size())
-                    .usedPercentage(!snapshotsByCar.isEmpty() ? (totalUsedRatio / snapshotsByCar.size()) * 100 : 0)
-                    .build();
-        }).sorted(Comparator.comparing(CarStatPerPeriodDTO::getPeriodLabel).reversed()).toList();
-    }
-
-    public List<CarStatPerPeriodPerCarDTO> getStatsGroupedByPeriodPerCarById(String period, Long idCar) {
-        List<CarSnapshot> allSnapshots = repository.findAll();
-        TimeGranularity granularity = TimeGranularity.valueOf(period.toUpperCase());
-
-        // Filtrer uniquement les snapshots de la voiture demandée
-        List<CarSnapshot> snapshotsForCar = allSnapshots.stream()
-                .filter(s -> s.getCarId() == idCar)
-                .toList();
-
-        if (snapshotsForCar.isEmpty()) {
-            return List.of(); // Pas de données pour cette voiture
-        }
-
-        // Regroupe par période uniquement les snapshots de la voiture
-        Map<Object, List<CarSnapshot>> groupedByPeriod = groupSnapshotsByPeriod(snapshotsForCar, granularity);
-
-        List<CarStatPerPeriodPerCarDTO> stats = new ArrayList<>();
-
-        for (Map.Entry<Object, List<CarSnapshot>> entry : groupedByPeriod.entrySet()) {
-            Object periodKey = entry.getKey();
-            List<CarSnapshot> snapshotsInPeriod = entry.getValue();
-
-            ZonedDateTime periodStart = getPeriodStart(periodKey, granularity);
-            ZonedDateTime periodEnd = getPeriodEnd(periodStart, granularity);
-            ZonedDateTime now = ZonedDateTime.now();
-            if (periodEnd.isAfter(now)) {
-                periodEnd = now;
-            }
-            Map<Long, List<CarSnapshot>> mapSingleCar = Map.of(idCar, snapshotsInPeriod);
-
-            double usedRatio = getStatsGroupedByPeriodByCar(mapSingleCar, allSnapshots, periodStart, periodEnd);
-
-            Map<Long, Double> kmByCar = getKmTravelledPerCarInPeriod(mapSingleCar, allSnapshots, periodStart, periodEnd);
-            double kmTravelled = kmByCar.getOrDefault(idCar, 0.0);
-
-            CarStatPerPeriodPerCarDTO dto = new CarStatPerPeriodPerCarDTO();
-            dto.setPeriodLabel(periodKey.toString());
-            dto.setKilometresTravelled(kmTravelled);
-            dto.setSnapshotCount(snapshotsInPeriod.size());
-            dto.setUsedPercentage(usedRatio * 100);
-
-            stats.add(dto);
-        }
-
-        // Tri par période décroissant
-        stats.sort(Comparator.comparing(CarStatPerPeriodPerCarDTO::getPeriodLabel).reversed());
-
+        List<CarStatPerPeriodDTO> stats = computeAverageCarStatsPerPeriod(allSnapshots, granularity);
+        Collections.reverse(stats); // pour avoir la plus récente en premier
         return stats;
     }
+    public List<CarStatPerPeriodDTO> computeCarStatsPerPeriodServiceByCarId(String period, Long carId) {
+        List<CarSnapshot> allSnapshots = repository.findAll(); // à adapter si besoin
+        TimeGranularity granularity = TimeGranularity.valueOf(period.toUpperCase());
 
-    //USED
-    public double getStatsGroupedByPeriodByCar(Map<Long, List<CarSnapshot>> snapshotsByCar,
-                                               List<CarSnapshot> allSnapshots,
-                                               ZonedDateTime periodStart,
-                                               ZonedDateTime periodEnd) {
+        List<CarStatPerPeriodDTO> stats = computeCarStatsPerPeriod(allSnapshots, carId, granularity);
+        Collections.reverse(stats); // pour avoir la plus récente en premier
+        return stats;
+    }
+    public List<CarStatPerPeriodDTO> computeAverageCarStatsPerPeriod(
+            List<CarSnapshot> allSnapshots,
+            TimeGranularity granularity
+    ) {
+        if (allSnapshots == null || allSnapshots.isEmpty()) return Collections.emptyList();
 
-        double totalUsedRatio = 0.0;
+        ZonedDateTime now = ZonedDateTime.now();
+        List<ZonedDateTime> periods = Periode.generatePeriodsAfterFirstSnapshot(allSnapshots, now, granularity,CarSnapshot::getTimestamp);
 
-        for (Map.Entry<Long, List<CarSnapshot>> carEntry : snapshotsByCar.entrySet()) {
-            long carId = carEntry.getKey();
-            List<CarSnapshot> snapshotsForCar = carEntry.getValue().stream()
-                    .sorted(Comparator.comparing(CarSnapshot::getTimestamp))
-                    .toList();
+        Map<Long, List<CarSnapshot>> snapshotsByCar = allSnapshots.stream()
+                .collect(Collectors.groupingBy(CarSnapshot::getCarId));
 
+        List<CarStatPerPeriodDTO> results = new ArrayList<>();
+
+        for (int i = 0; i < periods.size() - 1; i++) {
+            ZonedDateTime periodStart = periods.get(i);
+            ZonedDateTime periodEnd = periods.get(i + 1);
+
+            double totalUsedRatio = 0.0;
+            double totalKilometres = 0.0;
+            int carCount = 0;
+            int carCountForKilometres = 0;
+            int totalSnapshots = 0;
+
+            for (Map.Entry<Long, List<CarSnapshot>> carEntry : snapshotsByCar.entrySet()) {
+                long carId = carEntry.getKey();
+                List<CarSnapshot> snapshotsForCar = carEntry.getValue().stream()
+                        .sorted(Comparator.comparing(CarSnapshot::getTimestamp))
+                        .toList();
+
+                // Snapshot avant la période pour l’état initial
+                Optional<CarSnapshot> previousSnapshotOpt = allSnapshots.stream()
+                        .filter(s -> s.getCarId() == carId && s.getTimestamp().isBefore(periodStart.toInstant()))
+                        .max(Comparator.comparing(CarSnapshot::getTimestamp));
+
+                boolean initialUsed;
+                ZonedDateTime adjustedStart = periodStart;
+
+                if (previousSnapshotOpt.isPresent()) {
+                    initialUsed = previousSnapshotOpt.get().isUsed();
+                } else {
+                    initialUsed = true; // par défaut
+                    Optional<ZonedDateTime> firstSnapshotDateOpt = snapshotsForCar.stream()
+                            .map(CarSnapshot::getTimestamp)
+                            .filter(ts -> !ts.isBefore(periodStart.toInstant()))
+                            .map(ts -> ZonedDateTime.ofInstant(ts, periodStart.getZone()))
+                            .min(Comparator.naturalOrder());
+                    if (firstSnapshotDateOpt.isPresent()) {
+                        adjustedStart = firstSnapshotDateOpt.get();
+                    }
+                }
+
+                double usedRatio = getUsedPercentage(snapshotsForCar, initialUsed, adjustedStart, periodEnd);
+
+                ZonedDateTime finalAdjustedStart = adjustedStart; // ← maintenant c’est "final"
+
+                List<CarSnapshot> snapshotsInPeriod = snapshotsForCar.stream()
+                        .filter(s -> {
+                            Instant ts = s.getTimestamp();
+                            return !ts.isBefore(periodStart.toInstant()) && ts.isBefore(periodEnd.toInstant());
+                        })
+                        .toList();
+
+                Optional<CarSnapshot> lastSnapshotInPeriodOpt = snapshotsInPeriod.stream()
+                        .max(Comparator.comparing(CarSnapshot::getTimestamp));
+
+                double travelledKm = 0.0;
+
+                if (lastSnapshotInPeriodOpt.isPresent()) {
+                    CarSnapshot lastSnapshot = lastSnapshotInPeriodOpt.get();
+
+                    // Chercher snapshot AVANT la période
+                    Optional<CarSnapshot> snapshotBeforePeriodOpt = snapshotsForCar.stream()
+                            .filter(s -> s.getTimestamp().isBefore(periodStart.toInstant()))
+                            .max(Comparator.comparing(CarSnapshot::getTimestamp));
+
+                    double kmStart;
+                    if (snapshotBeforePeriodOpt.isPresent()) {
+                        kmStart = snapshotBeforePeriodOpt.get().getKilometresTravelled();
+                    } else {
+                        // Sinon, snapshot le plus ancien dans la période
+                        Optional<CarSnapshot> firstInPeriodOpt = snapshotsInPeriod.stream()
+                                .min(Comparator.comparing(CarSnapshot::getTimestamp));
+                        kmStart = firstInPeriodOpt.map(CarSnapshot::getKilometresTravelled).orElse(lastSnapshot.getKilometresTravelled());
+                    }
+
+                    travelledKm = lastSnapshot.getKilometresTravelled() - kmStart;
+                }
+
+                int snapshotCount = (int) snapshotsForCar.stream()
+                        .filter(s -> {
+                            Instant ts = s.getTimestamp();
+                            return !ts.isBefore(finalAdjustedStart.toInstant()) && ts.isBefore(periodEnd.toInstant());
+                        }).count();
+
+                boolean hasPreviousSnapshot = previousSnapshotOpt.isPresent();
+
+                boolean hasSnapshotInPeriod = snapshotsForCar.stream().anyMatch(s -> {
+                    Instant ts = s.getTimestamp();
+                    return !ts.isBefore(finalAdjustedStart.toInstant()) && ts.isBefore(periodEnd.toInstant());
+                });
+
+                if (hasPreviousSnapshot || hasSnapshotInPeriod) {
+                    totalUsedRatio += usedRatio;
+                    totalKilometres += travelledKm;
+                    totalSnapshots += snapshotCount;
+                    carCount++;
+
+
+                }
+                if(hasSnapshotInPeriod){
+                    carCountForKilometres++;
+                }
+            }
+
+            double avgUsed = carCount > 0 ? totalUsedRatio / carCount : 0.0;
+            double avgKm = carCountForKilometres > 0 ? totalKilometres / carCountForKilometres : 0.0;
+
+            results.add(CarStatPerPeriodDTO.builder()
+                    .periodLabel(Periode.formatPeriodLabel(periodStart, granularity))
+                    .usedPercentage(avgUsed * 100)
+                    .averageKilometresTravelled(avgKm)
+                    .snapshotCount(totalSnapshots)
+                    .build());
+        }
+
+        return results;
+    }
+
+    public List<CarStatPerPeriodDTO> computeCarStatsPerPeriod(
+            List<CarSnapshot> allSnapshots,
+            Long carId,
+            TimeGranularity granularity
+    ) {
+        if (allSnapshots == null || allSnapshots.isEmpty()) return Collections.emptyList();
+
+        // Ne garder que les snapshots de cette voiture
+        List<CarSnapshot> snapshotsForCar = allSnapshots.stream()
+                .filter(s -> s.getCarId() == carId)
+                .sorted(Comparator.comparing(CarSnapshot::getTimestamp))
+                .toList();
+
+        if (snapshotsForCar.isEmpty()) return Collections.emptyList();
+
+        ZonedDateTime now = ZonedDateTime.now();
+
+        List<ZonedDateTime> periods = Periode.generatePeriodsAfterFirstSnapshot(
+                snapshotsForCar,
+                now,
+                granularity,
+                CarSnapshot::getTimestamp
+        );
+
+        List<CarStatPerPeriodDTO> results = new ArrayList<>();
+
+        for (int i = 0; i < periods.size() - 1; i++) {
+            ZonedDateTime periodStart = periods.get(i);
+            ZonedDateTime periodEnd = periods.get(i + 1);
+
+            // Snapshot avant la période pour l’état initial
             Optional<CarSnapshot> previousSnapshotOpt = allSnapshots.stream()
                     .filter(s -> s.getCarId() == carId && s.getTimestamp().isBefore(periodStart.toInstant()))
                     .max(Comparator.comparing(CarSnapshot::getTimestamp));
 
-            boolean currentUsed = previousSnapshotOpt.map(CarSnapshot::isUsed).orElse(false);
-            double usedRatio = getUsedPercentage(snapshotsForCar, currentUsed, periodStart, periodEnd);
+            boolean initialUsed;
+            ZonedDateTime adjustedStart = periodStart;
 
-            totalUsedRatio += usedRatio;
-        }
+            if (previousSnapshotOpt.isPresent()) {
+                initialUsed = previousSnapshotOpt.get().isUsed();
+            } else {
+                initialUsed = true; // par défaut
+                Optional<ZonedDateTime> firstSnapshotDateOpt = snapshotsForCar.stream()
+                        .map(CarSnapshot::getTimestamp)
+                        .filter(ts -> !ts.isBefore(periodStart.toInstant()))
+                        .map(ts -> ZonedDateTime.ofInstant(ts, periodStart.getZone()))
+                        .min(Comparator.naturalOrder());
 
-        return totalUsedRatio;
-    }
-
-    public double getUsedPercentage(List<CarSnapshot> snapshots, boolean initialUsed, ZonedDateTime periodStart, ZonedDateTime periodEnd) {
-        snapshots = snapshots.stream()
-                .sorted(Comparator.comparing(CarSnapshot::getTimestamp))
-                .toList();
-
-        Instant start = periodStart.toInstant();
-        Instant end = periodEnd.toInstant();
-        Instant currentTime = start;
-        boolean isUsed = initialUsed;
-        long usedSeconds = 0;
-
-        for (CarSnapshot snapshot : snapshots) {
-            Instant snapshotTime = snapshot.getTimestamp();
-
-            if (snapshotTime.isAfter(end)) break; // Ne pas dépasser la période
-
-            long duration = Duration.between(currentTime, snapshotTime).getSeconds();
-            if (isUsed) {
-                usedSeconds += duration;
+                if (firstSnapshotDateOpt.isPresent()) {
+                    adjustedStart = firstSnapshotDateOpt.get();
+                }
             }
 
-            isUsed = snapshot.isUsed(); // mise à jour de l'état
-            currentTime = snapshotTime;
-        }
+            double usedRatio = getUsedPercentage(snapshotsForCar, initialUsed, adjustedStart, periodEnd);
 
-        // Ajouter la fin de période si toujours utilisé
-        if (currentTime.isBefore(end) && isUsed) {
-            usedSeconds += Duration.between(currentTime, end).getSeconds();
-        }
+            ZonedDateTime finalAdjustedStart = adjustedStart;
 
-        long totalSeconds = Duration.between(start, end).getSeconds();
-        return totalSeconds > 0 ? (double) usedSeconds / totalSeconds : 0.0;
-    }
+            List<CarSnapshot> filtered = snapshotsForCar.stream()
+                    .filter(s -> {
+                        Instant ts = s.getTimestamp();
+                        return !ts.isBefore(finalAdjustedStart.toInstant()) && ts.isBefore(periodEnd.toInstant());
+                    })
+                    .toList();
 
-    private Map<Object, List<CarSnapshot>> groupSnapshotsByPeriod(List<CarSnapshot> allSnapshots, TimeGranularity granularity) {
-        return switch (granularity) {
-            case HOUR -> allSnapshots.stream().collect(Collectors.groupingBy(s ->
-                    s.getTimestamp().atZone(ZoneId.systemDefault()).truncatedTo(ChronoUnit.HOURS)));
-            case DAY -> allSnapshots.stream().collect(Collectors.groupingBy(s ->
-                    s.getTimestamp().atZone(ZoneId.systemDefault()).toLocalDate()));
-            case WEEK -> allSnapshots.stream().collect(Collectors.groupingBy(s ->
-                    YearWeek.from(s.getTimestamp().atZone(ZoneId.systemDefault()).toLocalDate())));
-            case MONTH -> allSnapshots.stream().collect(Collectors.groupingBy(s ->
-                    YearMonth.from(s.getTimestamp().atZone(ZoneId.systemDefault()).toLocalDate())));
-            case YEAR -> allSnapshots.stream().collect(Collectors.groupingBy(s ->
-                    Year.from(s.getTimestamp().atZone(ZoneId.systemDefault()))));
-        };
-    }
+            List<CarSnapshot> snapshotsInPeriod = snapshotsForCar.stream()
+                    .filter(s -> {
+                        Instant ts = s.getTimestamp();
+                        return !ts.isBefore(periodStart.toInstant()) && ts.isBefore(periodEnd.toInstant());
+                    })
+                    .toList();
 
-    private ZonedDateTime getPeriodStart(Object periodKey, TimeGranularity granularity) {
-        return switch (granularity) {
-            case HOUR -> ((ZonedDateTime) periodKey);
-            case DAY -> ((LocalDate) periodKey).atStartOfDay(ZoneId.systemDefault());
-            case WEEK -> ((YearWeek) periodKey).atDay(DayOfWeek.MONDAY).atStartOfDay(ZoneId.systemDefault());
-            case MONTH -> ((YearMonth) periodKey).atDay(1).atStartOfDay(ZoneId.systemDefault());
-            case YEAR -> ((Year) periodKey).atDay(1).atStartOfDay(ZoneId.systemDefault());
-        };
-    }
-
-    private ZonedDateTime getPeriodEnd(ZonedDateTime periodStart, TimeGranularity granularity) {
-        return switch (granularity) {
-            case HOUR -> periodStart.plusHours(1);
-            case DAY -> periodStart.plusDays(1);
-            case WEEK -> periodStart.plusWeeks(1);
-            case MONTH -> periodStart.plusMonths(1);
-            case YEAR -> periodStart.plusYears(1);
-        };
-    }
-
-    //KM TRAVELLED
-    public Map<Long, Double> getKmTravelledPerCarInPeriod(
-            Map<Long, List<CarSnapshot>> snapshotsByCar,
-            List<CarSnapshot> allSnapshots,
-            ZonedDateTime periodStart,
-            ZonedDateTime periodEnd) {
-
-        Map<Long, Double> kmByCar = new HashMap<>();
-
-        for (Map.Entry<Long, List<CarSnapshot>> entry : snapshotsByCar.entrySet()) {
-            long carId = entry.getKey();
-            List<CarSnapshot> carSnapsInPeriod = entry.getValue();
-
-            // Dernier snapshot avant la période (pour km initial)
-            Optional<CarSnapshot> prevSnapshotOpt = allSnapshots.stream()
-                    .filter(s -> s.getCarId() == carId && s.getTimestamp().isBefore(periodStart.toInstant()))
+            Optional<CarSnapshot> lastSnapshotInPeriodOpt = snapshotsInPeriod.stream()
                     .max(Comparator.comparing(CarSnapshot::getTimestamp));
 
-            double kmStart = prevSnapshotOpt.map(CarSnapshot::getKilometresTravelled).orElse(0.0);
+            double travelledKm = 0.0;
 
-            // Dernier snapshot dans la période
-            Optional<CarSnapshot> lastInPeriodOpt = carSnapsInPeriod.stream()
-                    .max(Comparator.comparing(CarSnapshot::getTimestamp));
+            if (lastSnapshotInPeriodOpt.isPresent()) {
+                CarSnapshot lastSnapshot = lastSnapshotInPeriodOpt.get();
 
-            double kmEnd = lastInPeriodOpt.map(CarSnapshot::getKilometresTravelled).orElse(kmStart);
+                // Chercher snapshot AVANT la période
+                Optional<CarSnapshot> snapshotBeforePeriodOpt = snapshotsForCar.stream()
+                        .filter(s -> s.getTimestamp().isBefore(periodStart.toInstant()))
+                        .max(Comparator.comparing(CarSnapshot::getTimestamp));
 
-            kmByCar.put(carId, Math.max(0, kmEnd - kmStart));
+                double kmStart;
+                if (snapshotBeforePeriodOpt.isPresent()) {
+                    kmStart = snapshotBeforePeriodOpt.get().getKilometresTravelled();
+                } else {
+                    // Sinon, snapshot le plus ancien dans la période
+                    Optional<CarSnapshot> firstInPeriodOpt = snapshotsInPeriod.stream()
+                            .min(Comparator.comparing(CarSnapshot::getTimestamp));
+                    kmStart = firstInPeriodOpt.map(CarSnapshot::getKilometresTravelled).orElse(lastSnapshot.getKilometresTravelled());
+                }
+
+                travelledKm = lastSnapshot.getKilometresTravelled() - kmStart;
+            }
+
+
+            int snapshotCount = filtered.size();
+
+            results.add(CarStatPerPeriodDTO.builder()
+                    .periodLabel(Periode.formatPeriodLabel(periodStart, granularity))
+                    .usedPercentage(usedRatio * 100)
+                    .averageKilometresTravelled(travelledKm)
+                    .snapshotCount(snapshotCount)
+                    .build());
         }
 
-        return kmByCar;
-    }
-
-    public double getAverageKmTravelled(Map<Long, Double> kmByCar) {
-        if (kmByCar.isEmpty()) return 0;
-        return kmByCar.values().stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        return results;
     }
 }

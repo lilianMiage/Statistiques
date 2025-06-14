@@ -5,6 +5,7 @@ import fr.miage.lroux.statistique.service.CarSnapshotService;
 import fr.miage.lroux.statistique.transientObj.CarGlobalStatsDTO;
 import fr.miage.lroux.statistique.transientObj.CarStatPerPeriodDTO;
 import fr.miage.lroux.statistique.transientObj.CarStatPerPeriodPerCarDTO;
+import fr.miage.lroux.statistique.transientObj.StationStatPerPeriodDTO;
 import fr.miage.lroux.statistique.utilities.CarInconnuException;
 import fr.miage.lroux.statistique.utilities.UserInconnuException;
 import org.springframework.http.ResponseEntity;
@@ -34,24 +35,25 @@ public class CarStatistiqueController {
 
     @GetMapping("/hour")
     public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParHeure() {
-        return ResponseEntity.ok(carSnapshotService.getStatsGroupedByPeriod("hour"));
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeAverageCarStatsPerPeriodService("hour");
+        return ResponseEntity.ok(stats);
     }
     @GetMapping("/hour/{idCar}")
-    public ResponseEntity<List<CarStatPerPeriodPerCarDTO>> getStatsParHeureParVoiture(@PathVariable Long idCar) throws CarInconnuException {
-        List<CarStatPerPeriodPerCarDTO> stats = carSnapshotService.getStatsGroupedByPeriodPerCarById("hour",idCar);
+    public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParHeureParVoiture(@PathVariable Long idCar) throws CarInconnuException {
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeCarStatsPerPeriodServiceByCarId("hour",idCar);
         if (stats.isEmpty()) {
             throw new CarInconnuException();
         }
         return ResponseEntity.ok(stats);
     }
-
     @GetMapping("/day")
     public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParJour() {
-        return ResponseEntity.ok(carSnapshotService.getStatsGroupedByPeriod("day"));
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeAverageCarStatsPerPeriodService("day");
+        return ResponseEntity.ok(stats);
     }
     @GetMapping("/day/{idCar}")
-    public ResponseEntity<List<CarStatPerPeriodPerCarDTO>> getStatsParJourParVoiture(@PathVariable Long idCar) throws CarInconnuException {
-        List<CarStatPerPeriodPerCarDTO> stats = carSnapshotService.getStatsGroupedByPeriodPerCarById("day",idCar);
+    public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParJourParVoiture(@PathVariable Long idCar) throws CarInconnuException {
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeCarStatsPerPeriodServiceByCarId("day",idCar);
         if (stats.isEmpty()) {
             throw new CarInconnuException();
         }
@@ -59,11 +61,12 @@ public class CarStatistiqueController {
     }
     @GetMapping("/month")
     public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParMois() {
-        return ResponseEntity.ok(carSnapshotService.getStatsGroupedByPeriod("month"));
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeAverageCarStatsPerPeriodService("month");
+        return ResponseEntity.ok(stats);
     }
     @GetMapping("/month/{idCar}")
-    public ResponseEntity<List<CarStatPerPeriodPerCarDTO>> getStatsParMoisParVoiture(@PathVariable Long idCar) throws CarInconnuException {
-        List<CarStatPerPeriodPerCarDTO> stats = carSnapshotService.getStatsGroupedByPeriodPerCarById("month",idCar);
+    public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParMoisParVoiture(@PathVariable Long idCar) throws CarInconnuException {
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeCarStatsPerPeriodServiceByCarId("month",idCar);
         if (stats.isEmpty()) {
             throw new CarInconnuException();
         }
@@ -71,11 +74,12 @@ public class CarStatistiqueController {
     }
     @GetMapping("/year")
     public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParAnnee() {
-        return ResponseEntity.ok(carSnapshotService.getStatsGroupedByPeriod("year"));
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeAverageCarStatsPerPeriodService("year");
+        return ResponseEntity.ok(stats);
     }
     @GetMapping("/year/{idCar}")
-    public ResponseEntity<List<CarStatPerPeriodPerCarDTO>> getStatsParAnneeParVoiture(@PathVariable Long idCar) throws CarInconnuException {
-        List<CarStatPerPeriodPerCarDTO> stats = carSnapshotService.getStatsGroupedByPeriodPerCarById("year",idCar);
+    public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParAnneeParVoiture(@PathVariable Long idCar) throws CarInconnuException {
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeCarStatsPerPeriodServiceByCarId("year",idCar);
         if (stats.isEmpty()) {
             throw new CarInconnuException();
         }
@@ -83,14 +87,16 @@ public class CarStatistiqueController {
     }
     @GetMapping("/week")
     public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParSemaine() {
-        return ResponseEntity.ok(carSnapshotService.getStatsGroupedByPeriod("week"));
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeAverageCarStatsPerPeriodService("week");
+        return ResponseEntity.ok(stats);
     }
     @GetMapping("/week/{idCar}")
-    public ResponseEntity<List<CarStatPerPeriodPerCarDTO>> getStatsParSemaineParVoiture(@PathVariable Long idCar) throws CarInconnuException {
-        List<CarStatPerPeriodPerCarDTO> stats = carSnapshotService.getStatsGroupedByPeriodPerCarById("week",idCar);
+    public ResponseEntity<List<CarStatPerPeriodDTO>> getStatsParSemaineParVoiture(@PathVariable Long idCar) throws CarInconnuException {
+        List<CarStatPerPeriodDTO> stats = carSnapshotService.computeCarStatsPerPeriodServiceByCarId("week",idCar);
         if (stats.isEmpty()) {
             throw new CarInconnuException();
         }
         return ResponseEntity.ok(stats);
     }
+
 }
