@@ -1,12 +1,6 @@
-# Étape 1 : Build l'application
-FROM maven:3.9.4-eclipse-temurin-17 AS build
-WORKDIR /app
-COPY . .
-RUN mvn clean package -DskipTests
-
-# Étape 2 : Image exécutable
-FROM eclipse-temurin:17-jdk
-WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
-EXPOSE 8121
-ENTRYPOINT ["java", "-jar", "app.jar"]
+FROM openjdk:17-jdk-alpine
+RUN addgroup -S spring && adduser -S spring -G spring
+USER spring:spring
+ARG JAR_FILE=target/*.jar
+COPY ${JAR_FILE} app.jar
+ENTRYPOINT ["java","-jar","/app.jar"]

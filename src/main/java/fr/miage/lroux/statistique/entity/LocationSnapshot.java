@@ -19,11 +19,11 @@ public class LocationSnapshot {
     @Id
     private String id;
     private Instant timestamp;
-    private long idLocation;
-    private long idVoiture;
-    private long idUser;
-    private long idAccessCard;
-    private long idStation;
+    private long locationId;
+    private long carId;
+    private long userId;
+    private long accessCardId;
+    private long stationId;
     private boolean active;
     private double distanceTravelled;
 }
