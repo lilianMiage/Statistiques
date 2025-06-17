@@ -10,4 +10,6 @@ import java.util.List;
 public interface LocationSnapshotRepository extends MongoRepository<LocationSnapshot, String> {
     List<LocationSnapshot> findByLocationIdOrderByTimestampDesc(long locationId);
     List<LocationSnapshot> findByTimestampBetween(Instant start, Instant end);
+    List<LocationSnapshot> findByUserId(Long userId);
+    List<LocationSnapshot> findByCarId(Long carId);
 }

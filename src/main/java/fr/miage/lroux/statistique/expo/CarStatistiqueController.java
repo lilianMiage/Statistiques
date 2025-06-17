@@ -18,15 +18,10 @@ import java.util.List;
 @RestController()
 @RequestMapping("/api/statistique/car")
 public class CarStatistiqueController {
-    @GetMapping("/lastKmMaintenance/{id}")
-    public int getLastKmMaintenanceCar(@PathVariable Long id) throws CarInconnuException{
-        return 0;
-    }
-
-    @GetMapping("/kmUser/{idCar},{idUser}")
-    public int getKmUserCar(@PathVariable Long idCar, @PathVariable Long idUser) throws CarInconnuException, UserInconnuException {
-        return 0;
-    }
+//    @GetMapping("/lastKmMaintenance/{id}")
+//    public int getLastKmMaintenanceCar(@PathVariable Long id) throws CarInconnuException{
+//        return 0;
+//    }
 
     private final CarSnapshotService carSnapshotService;
     public CarStatistiqueController(CarSnapshotService carSnapshotService) {

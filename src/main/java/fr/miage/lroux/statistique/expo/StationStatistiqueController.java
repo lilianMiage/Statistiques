@@ -37,12 +37,12 @@ public class StationStatistiqueController {
     }
 
     @GetMapping("/hour")
-    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeure2() {
+    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeure() {
         List<StationStatPerPeriodDTO> stats = stationSnapshotService.computeStationStatsPerPeriodService("hour");
         return ResponseEntity.ok(stats);
     }
     @GetMapping("/hour/{idStation}")
-    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeureParStation2(@PathVariable Long idStation) throws StationInconnuException {
+    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeureParStation(@PathVariable Long idStation) throws StationInconnuException {
         List<StationStatPerPeriodDTO> stats = stationSnapshotService.computeStationStatsPerPeriodServiceByStationId("hour",idStation);
         if (stats.isEmpty()) {
             throw new StationInconnuException();
@@ -50,12 +50,12 @@ public class StationStatistiqueController {
         return ResponseEntity.ok(stats);
     }
     @GetMapping("/day")
-    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeure() {
+    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParJour() {
         List<StationStatPerPeriodDTO> stats = stationSnapshotService.computeStationStatsPerPeriodService("day");
         return ResponseEntity.ok(stats);
     }
     @GetMapping("/day/{idStation}")
-    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParHeureParStation(@PathVariable Long idStation) throws StationInconnuException {
+    public ResponseEntity<List<StationStatPerPeriodDTO>> getStatsParJourParStation(@PathVariable Long idStation) throws StationInconnuException {
         List<StationStatPerPeriodDTO> stats = stationSnapshotService.computeStationStatsPerPeriodServiceByStationId("day",idStation);
         if (stats.isEmpty()) {
             throw new StationInconnuException();

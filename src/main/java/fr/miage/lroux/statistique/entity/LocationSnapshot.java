@@ -25,5 +25,5 @@ public class LocationSnapshot {
     private long accessCardId;
     private long stationId;
     private boolean active;
-    private double distanceTravelled;
+    private double distanceTravelledLocation;
 }
