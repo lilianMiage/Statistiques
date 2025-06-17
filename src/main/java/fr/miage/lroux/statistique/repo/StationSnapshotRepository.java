@@ -7,6 +7,6 @@ import java.time.Instant;
 import java.util.List;
 
 public interface StationSnapshotRepository extends MongoRepository<StationSnapshot, String> {
-    List<StationSnapshot> findByStationIdOrderByTimestampDesc(long carId);
+    List<StationSnapshot> findByStationIdOrderByTimestampDesc(long stationId);
     List<StationSnapshot> findByTimestampBetween(Instant start, Instant end);
 }
