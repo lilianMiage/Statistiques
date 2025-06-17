@@ -32,8 +32,8 @@ public class StationSnapshotService {
         return repository.save(snapshot);
     }
 
-    public List<StationSnapshot> getSnapshotsByStationId(long carId) {
-        return repository.findByStationIdOrderByTimestampDesc(carId);
+    public List<StationSnapshot> getSnapshotsByStationId(long stationId) {
+        return repository.findByStationIdOrderByTimestampDesc(stationId);
     }
 
     //methode de stat
