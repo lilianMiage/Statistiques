@@ -1,14 +1,14 @@
 package fr.miage.lroux.statistique.transientObj;
 
 public class StationUsageDTO {
-    private Long id;
+    private Long stationId;
     private double occupationRate;
 
-    public StationUsageDTO(Long id, double occupationRate) {
-        this.id = id;
+    public StationUsageDTO(Long stationId, double occupationRate) {
+        this.stationId = stationId;
         this.occupationRate = occupationRate;
     }
 
-    public Long getId() { return id; }
+    public Long getStationId() { return stationId; }
     public double getOccupationRate() { return occupationRate; }
 }
